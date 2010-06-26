@@ -185,6 +185,7 @@ class SearchQuery:
         self.excludeVCS = True
         self.selectFileTypes = False
         self.fileTypeString = ''
+        self.wholeWord = False
 
     def parseFileTypeString (self):
         "Returns a list with the separate file globs from fileTypeString"
@@ -225,6 +226,10 @@ class SearchQuery:
             self.selectFileTypes = gclient.get_without_default(gconfBase+"/select_file_types").get_bool()
         except:
             self.selectFileTypes = False
+	try:
+            self.wholeWord = gclient.get_without_default(gconfBase+"/is_whole_word").get_bool()
+        except:
+            self.wholeWord = False
 
     def storeDefaults (self, gclient):
         gclient.set_bool(gconfBase+"/case_sensitive", self.caseSensitive)
@@ -234,6 +239,7 @@ class SearchQuery:
         gclient.set_bool(gconfBase+"/exclude_backup", self.excludeBackup)
         gclient.set_bool(gconfBase+"/exclude_vcs", self.excludeVCS)
         gclient.set_bool(gconfBase+"/select_file_types", self.selectFileTypes)
+        gclient.set_bool(gconfBase+"/is_whole_word", self.wholeWord)
 
 
 class LineSplitter:
@@ -389,6 +395,8 @@ class GrepProcess:
         if not(self.query.isRegExp):
             grepCmd += ["-F"]
 
+	    if (self.query.wholeWord):
+	       grepCmd += ["-w"]
         # Assume all file contents are in UTF-8 encoding (AFAIK grep will just search for byte sequences, it doesn't care about encodings):
         self.queryText = self.queryText.encode("utf-8")
 
@@ -780,6 +788,7 @@ class FileSearchWindowHelper:
         self.tree.get_widget('cbExcludeVCS').set_active(query.excludeVCS)
         self.tree.get_widget('cbSelectFileTypes').set_active(query.selectFileTypes)
         self.tree.get_widget('cboFileTypeList').set_sensitive( query.selectFileTypes )
+        self.tree.get_widget('cbWholeWord').set_active(query.wholeWord)
 
         inputValid = False
         while not(inputValid):
@@ -816,6 +825,7 @@ class FileSearchWindowHelper:
         query.excludeBackup = self.tree.get_widget('cbExcludeBackups').get_active()
         query.excludeVCS = self.tree.get_widget('cbExcludeVCS').get_active()
         query.selectFileTypes = self.tree.get_widget('cbSelectFileTypes').get_active()
+        query.wholeWord = self.tree.get_widget('cbWholeWord').get_active()
         query.fileTypeString = typeListString
 
         self._dialog.destroy()
@@ -1002,6 +1012,10 @@ class FileSearcher:
             # workaround to scroll to cursor position when opening file into window of "Unnamed Document":
             gobject.idle_add(scrollToCursorCb, currView)
 
+            gobject.idle_add(markAtCursorCb, currDoc,lineno)
+
+
+            
     def on_btnClose_clicked (self, button):
         self.destroy()
 
@@ -1060,6 +1074,13 @@ class FileSearcher:
 
 def scrollToCursorCb (view):
     view.scroll_to_cursor()
+    return False
+
+def markAtCursorCb (doc,lineno):
+    iterStart = doc.get_iter_at_line_offset((lineno - 1),0)
+    iterEnd = iterStart.copy()
+    iterEnd.forward_to_line_end()
+    doc.select_range(iterStart,iterEnd)
     return False
 
 def resultSearchCb (model, column, key, it):
